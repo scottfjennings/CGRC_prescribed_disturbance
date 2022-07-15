@@ -1,26 +1,8 @@
+
+# the code here is adapted for ACR use from the Point Blue Wrangler program
+# wrangler code accessed July 2022
+
 #veg code
-add.pointyear = function(data){
-  
-  if("Soil.Surface" %in% colnames(data)){
-    data = subset(data, subset = data$Soil.Surface != "")
-  }
-  
-  if("Date" %in% colnames(data)){
-    data$Date = read.date(data$Date)
-    data$year = format(as.Date(data$Date), "%Y")
-  } else if("Event.Date" %in% colnames(data)){
-    data$Event.Date = read.date(data$Event.Date)
-    data$year = format(as.Date(data$Event.Date), "%Y")
-  }
-  
-  if("PointId" %in% colnames(data)){
-    data$pointyear = paste(data$PointId, "-", data$year)
-  } else if("Point.Id" %in% colnames(data)){
-    data$pointyear = paste(data$Point.Id, "-", data$year)
-  } else {stop("No Point.Id column identified")}
-  
-  return(data)
-}
 
 
 functional.cover.table = function(main, lpi,
@@ -34,8 +16,8 @@ functional.cover.table = function(main, lpi,
   #CAPlants = RMN.functions:::CAPlantsv2
   #Invasives = RMN.functions:::Invasivesv1
   
-  CAPlants = read.csv("data_required/CAPlantsv2.csv")
-  Invasives = read.csv("data_required/Invasivesv1.csv")
+  CAPlants = read.csv(here("data/helper_files/CAPlantsv2.csv"))
+  Invasives = read.csv(here("data/helper_files/Invasivesv1.csv"))
   
   CAPlantsI<-CAPlants
   levels(CAPlantsI$FunGrp) <- c(levels(CAPlantsI$FunGrp), "Invasives")
