@@ -52,3 +52,11 @@ add.pointyear = function(data){
   
   return(data)
 }
+
+split_point_id <- function(df) {
+df <- df %>% 
+  mutate(Point.Id = gsub("X", "", Point.Id)) %>% 
+   separate(Point.Id, 
+           into = c("point", "line"), 
+           sep = "(?<=[0-9])(?=[A-Za-z])", remove = FALSE)
+}
