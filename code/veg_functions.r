@@ -12,9 +12,6 @@ get_fungrp_native_cover = function(lpi){
   
    non_spp = c("", "2FA", "2FORB", "2FP", "2GA", "2GP", "2LICHN",
               "2LTR", "2LTRWS",  "2PLANT",  "2W", "NOPLANT", "L", "WL")
-   
-  lpi <- lpi %>%
-    filter(year %in% surveyyear)
 
   # need number of hits per line to calculate relative cover
   a <- lpi %>% 
@@ -69,12 +66,10 @@ get_species_cover = function(lpi){
    non_spp = c("", "2FA", "2FORB", "2FP", "2GA", "2GP", "2LICHN",
               "2LTR", "2LTRWS",  "2PLANT",  "2W", "NOPLANT", "L", "WL")
    
-  lpi <- lpi %>%
-    filter(year %in% surveyyear)
 
   # need number of hits per line to calculate relative cover
   a <- lpi %>% 
-    group_by(pointyear) %>% 
+    group_by(Point.Id, year) %>% 
     summarise(NumIndices = n())
   
   #lpi.trim = lpi %>% 
@@ -99,10 +94,10 @@ get_species_cover = function(lpi){
   
   Fun.Sum <- longlpi %>% 
     filter(!is.na(nat.nnat.inv)) %>% 
-    group_by(Transect.Name, pointyear, Point.Id, year, USDA.code) %>% 
+    group_by(Transect.Name, Point.Id, year, USDA.code) %>% 
     summarise(Count = n()) %>%
     ungroup() %>% 
-    group_by(Transect.Name, pointyear, Point.Id, year) %>% 
+    group_by(Transect.Name, Point.Id, year) %>% 
     mutate(group.hits = sum(Count)) %>% 
     ungroup() %>% 
     full_join(a) %>% 
@@ -120,8 +115,6 @@ get_fungrp_native_richness = function(lpi){
    non_spp = c("", "2FA", "2FORB", "2FP", "2GA", "2GP", "2LICHN",
               "2LTR", "2LTRWS",  "2PLANT",  "2W", "NOPLANT", "L", "WL")
    
-  lpi <- lpi %>%
-    filter(year %in% surveyyear)
 
  
   obs_species = lpi %>% 
