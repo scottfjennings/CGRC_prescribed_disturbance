@@ -8,9 +8,9 @@ library(reshape)
 source(here("code/general_functions.R"))
 source(here("code/veg_functions.R"))
 options(scipen = 999)
-surveyyear = 2022
+surveyyear = 2023
 
-lpi <- read.csv(here("data/CGRC_LPI_20220714.csv")) %>% 
+lpi <- read.csv(here("data/CGRC_LPI.csv")) %>% 
   add.pointyear()
 
 
