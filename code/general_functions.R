@@ -36,18 +36,15 @@ add.pointyear = function(data){
     data = subset(data, subset = data$Soil.Surface != "")
   }
   
-  if("Date" %in% colnames(data)){
-    data$Date = read.date(data$Date)
-    data$year = format(as.Date(data$Date), "%Y")
-  } else if("Event.Date" %in% colnames(data)){
-    data$Event.Date = read.date(data$Event.Date)
-    data$year = format(as.Date(data$Event.Date), "%Y")
-  }
+  data <- data %>% 
+    mutate(across(contains("Date"), ~as.Date(.)),
+           year = year(Date))
+  
   
   if("PointId" %in% colnames(data)){
-    data$pointyear = paste(data$PointId, "-", data$year)
+    data$pointyear = paste(data$PointId, "-", data$year, sep = "")
   } else if("Point.Id" %in% colnames(data)){
-    data$pointyear = paste(data$Point.Id, "-", data$year)
+    data$pointyear = paste(data$Point.Id, "-", data$year, sep = "")
   } else {stop("No Point.Id column identified")}
   
   return(data)
