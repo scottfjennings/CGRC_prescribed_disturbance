@@ -50,6 +50,38 @@ add.pointyear = function(data){
   return(data)
 }
 
+
+#' Convert date to Date and add year column
+#'
+#' @param df data frame with data column as character 
+#'
+#' @return
+#' @export
+#'
+#' @examples
+clean_date_year <- function(df) {
+  df <- df %>% 
+    mutate(Date = as.Date(Date),
+           year = year(Date))
+}
+
+
+
+#' split_point_id
+#' 
+#' Splits point id into point and transect line. 
+#'
+#' @param df a data frame with a Point.Id field
+#'
+#' @return
+#' @export
+#' 
+#' @details
+#' Splits on the transition from number to letter; separate on Point.Id from first answer here: https://stackoverflow.com/questions/9756360/split-character-data-into-numbers-and-letters
+# esp this comment: "?<= is "look behind" : here it basically matches any uppercase or lowercase letter ([A-Za-z]) which is "before the cursor". And ?= is "look ahead" : it matches any number ([0-9]) "after the cursor". None of these two "moves the cursor" so put together they match the "in between" the letter and numbers, ie where we want to split."
+#' 
+#'
+#' @examples
 split_point_id <- function(df) {
 df <- df %>% 
   mutate(Point.Id = gsub("X", "", Point.Id)) %>% 
