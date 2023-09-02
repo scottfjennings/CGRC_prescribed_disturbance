@@ -3,12 +3,15 @@
 library(tidyverse)
 library(here)
 library(cowplot)
-library(reshape)
+#library(reshape)
 
 source(here("code/general_functions.R"))
 source(here("code/veg_functions.R"))
 options(scipen = 999)
-surveyyear = 2023
+surveyyear = c(2022, 2023)
+
+treatments <- read.csv(here("data/treatments.csv"))
+
 
 lpi <- read.csv(here("data/CGRC_LPI.csv")) %>% 
   add.pointyear()
@@ -19,17 +22,12 @@ veg_cover <- lpi %>%
   get_fungrp_native_cover() %>% 
   split_point_id()
 
-# separate on Point.Id from first answer here: https://stackoverflow.com/questions/9756360/split-character-data-into-numbers-and-letters
-# esp this comment: "?<= is "look behind" : here it basically matches any uppercase or lowercase letter ([A-Za-z]) which is "before the cursor". And ?= is "look ahead" : it matches any number ([0-9]) "after the cursor". None of these two "moves the cursor" so put together they match the "in between" the letter and numbers, ie where we want to split."
 
-
+# do we get anything other than 100% total cover?
 veg_cover %>% 
   group_by(Point.Id, year) %>% 
   summarise(ztest = sum(rel.cover)) %>% 
   view()
-
-
-
 
 
 plot_veg_mean_cov <- veg_cover %>% 
@@ -48,7 +46,8 @@ plot_veg_mean_cov <- veg_cover %>%
   ungroup() %>% 
   mutate(se.cover = sd.cover/sqrt(n.line),
          lwr.se = mean.cov - se.cover,
-         upr.se = mean.cov + se.cover)
+         upr.se = mean.cov + se.cover) %>% 
+  left_join(treatments)
 
 # plotting % cover ----
 # plot woody plant cover
@@ -61,13 +60,15 @@ max.y.wood = plot_veg_mean_cov %>%
 plot_veg_mean_cov %>% 
   filter(cover.type == "abs.cover", FunGrp == "Shrub", nat.nnat.inv == "Native") %>% 
   ggplot() +
-  geom_point(aes(x = point, y = mean.cov)) +
-  geom_errorbar(aes(x = point, ymin = lwr.se, ymax = upr.se)) +
+  geom_point(aes(x = point, y = mean.cov, color = as.character(year))) +
+  geom_errorbar(aes(x = point, ymin = lwr.se, ymax = upr.se, color = as.character(year))) +
   geom_hline(yintercept = 15, color = "red") +
   scale_y_continuous(breaks = seq(0, max.y.wood$upr.se, by = 20), labels = seq(0, max.y.wood$upr.se, by = 20)) +
   coord_flip() +
   labs(x = "Management unit",
-       y = "Mean woody plant % cover") +
+       title = "Mean woody plant % cover",
+       color = "",
+       y = "% cover") +
   theme_bw()
 
 ggsave(here("figures/woody_cover.png"), width = 8, height = 6)
@@ -86,15 +87,15 @@ plot_veg_mean_cov %>%
          manag.obj = ifelse(nat.nnat.inv == "Native", ifelse(point %in% c("CGRC-07", "CGRC-08"), 50, 10), NA) 
          ) %>% 
   ggplot() +
-  geom_point(aes(x = FunGrp, y = mean.cov, color = nat.nnat.inv), position=position_dodge(width=0.5)) +
+  geom_point(aes(x = point, y = mean.cov, color = nat.nnat.inv, shape = as.character(year)), position=position_dodge(width=0.5)) +
   #geom_point(aes(x = FunGrp, y = manag.obj, color = nat.nnat.inv), position=position_dodge(width=0.5), shape = 8, show.legend=FALSE) +
-  geom_errorbar(aes(x = FunGrp, ymin = lwr.se, ymax = upr.se, color = nat.nnat.inv), position=position_dodge(width=0.5)) +
+  geom_errorbar(aes(x = point, ymin = lwr.se, ymax = upr.se, color = nat.nnat.inv, linetype = as.character(year)), position=position_dodge(width=0.5)) +
   labs(x = "Vegetation type",
        y = "Mean grass and forb % cover",
        shape = "",
        color = "") +
   theme_bw() +
-  facet_wrap(~point, scales = "free_y")
+  facet_wrap(~FunGrp, scales = "free_y")
 
 ggsave(here("figures/grass_forb_cover.png"), width = 8.5, height = 6)
 
@@ -111,7 +112,7 @@ richness %>%
   mutate(FunGrp = gsub(" ", "\n", FunGrp),
          manag.obj = ifelse(nat.nnat.inv == "Native", richness + 2, NA)) %>%
   ggplot() +
-  geom_point(aes(x = FunGrp, y = richness, color = nat.nnat.inv), position=position_dodge(width=0.5)) +
+  geom_point(aes(x = FunGrp, y = richness, color = nat.nnat.inv, shape = as.character(year)), position=position_dodge(width=0.5)) +
   #geom_point(aes(x = FunGrp, y = manag.obj, color = nat.nnat.inv), position=position_dodge(width=0.5), shape = 8, show.legend=FALSE) +
   ylim(0, 8) +
   labs(x = "Vegetation type",
