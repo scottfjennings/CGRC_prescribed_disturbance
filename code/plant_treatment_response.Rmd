@@ -45,11 +45,11 @@ lpi <- read.csv(here("data/CGRC_LPI.csv")) %>%
 
 long_lpi <- lengthen_lpi(lpi)
 
-long_lpi_assigned <- assign_functional_group_status(long_lpi)
+long_lpi_assigned <- assign_functional_group_status(long_lpi) %>% 
+  split_point_id()
 
-multi_year_points <- lpi %>% 
-  split_point_id() %>% 
-  distinct(year, point) %>% 
+multi_year_points <- long_lpi_assigned %>% 
+ distinct(year, point) %>% 
   count(point) %>% 
   filter(n > 1) %>% 
   select(point)
@@ -58,93 +58,50 @@ multi_year_points <- lpi %>%
 
 # percent cover ----
 veg_cover <- long_lpi_assigned %>% 
-  get_fungrp_native_cover() %>% 
-  split_point_id()
+  get_fungrp_native_cover()
 
 
 plot_veg_mean_cov <- veg_cover %>% 
   full_join(expand.grid(year = distinct(veg_cover, year)$year,
                         point = distinct(veg_cover, point)$point,
-                        line = distinct(veg_cover, line)$line,
                         FunGrp = distinct(veg_cover, FunGrp)$FunGrp,
                         nat.nnat.inv = distinct(veg_cover, nat.nnat.inv)$nat.nnat.inv)) %>% 
   mutate(abs.cover = ifelse(is.na(abs.cover), 0, abs.cover),
          rel.cover = ifelse(is.na(rel.cover), 0, rel.cover)) %>% 
   pivot_longer(cols = contains("cover"), names_to = "cover.type", values_to = "cover") %>% 
-  group_by(year, point, FunGrp, nat.nnat.inv, cover.type) %>% 
-  summarise(n.line = n(),
-            mean.cov = mean(cover),
-            sd.cover = sd(cover)) %>% 
-  ungroup() %>% 
-  mutate(se.cover = sd.cover/sqrt(n.line),
-         lwr.se = mean.cov - se.cover,
-         upr.se = mean.cov + se.cover) %>% 
+  #group_by(year, point, FunGrp, nat.nnat.inv, cover.type) %>% 
+  #summarise(n.line = n(),
+  #          mean.cov = mean(cover),
+  #          sd.cover = sd(cover)) %>% 
+  #ungroup() %>% 
+  #mutate(se.cover = sd.cover/sqrt(n.line),
+  #       lwr.se = mean.cov - se.cover,
+  #       upr.se = mean.cov + se.cover) %>% 
   left_join(treatments)  %>% 
   right_join(multi_year_points)%>% 
   group_by(year, FunGrp, nat.nnat.inv, cover.type, treatment) %>% 
-  mutate(grand.mean.cov = mean(mean.cov),
-            sd.grand.mean.cov = sd(mean.cov)) %>% 
+  mutate(grand.mean.cov = mean(cover),
+            sd.grand.mean.cov = sd(cover)) %>% 
   ungroup()
 
 ```
   
-# Did we see any vegetation change after the first year of prescribed grazing?  
-
-From the plant data collected by Point Blue, I calculated the percent cover and species richness of various functional groups of plants. We have data from both years for 4 plots:  
-
-* CGRC-01 is our control plot  
-* CGRC-02 was grazed in the late summer of 2022 (after the 2022 veg measurements)  
-* CGRC-03 and CGRC-05 are scheduled for treatment in late summer/early fall 2023  
- 
-
-Thus, in summer 2023 we have data for three untreated plots to compare to our one treated plot. In all figures below, for untreated plots, the solid lines show the average change across all untreated plots and in the treated plot, and the dashed lines show the change for each untreated plot to give a sense of the variability. 
-
-Overall, you can see that the data are quite noisy, and in particular there was substantial variability in the values calculated between the untreated plots. Thus there isn't a clear overall treatment effect evident in these data. There is some suggestion that both non-native grass and native forb % cover increased meaningfully in the grazed plots. This latter potential result is interesting because there was a decrease in native forb richness in the grazed plot from 3 to only a single species:   
-
-We may expect detectable treatment effects following multiple years of grazing and especially if we can time spring grazing to limit new invasive seeds from being produced. Anecdotally, the sheep apparently had limited capacity/opportunity to browse or knock down most of the larger Coyote brush in the treated plot. Our objectives around woody plant cover will likely need additional disturbance methods.     
-
 
 ```{r}
-
-plot_veg_mean_cov %>% 
-  filter(cover.type == "abs.cover", FunGrp == "Shrub", nat.nnat.inv == "Native") %>% 
-  ggplot() +
-  stat_smooth(aes(x = year, y = mean.cov, color = treatment, group = point), method = "lm", se = FALSE, linetype = 2) +
-  geom_point(aes(x = year, y = grand.mean.cov, color = treatment), position=position_dodge(width = zwidth), size = 2) +
-  geom_errorbar(aes(x = year, ymin = grand.mean.cov - sd.grand.mean.cov, ymax = grand.mean.cov + sd.grand.mean.cov, color = treatment), position=position_dodge(width = zwidth), width = 0.1) +
-  stat_smooth(aes(x = year, y = grand.mean.cov, color = treatment), method = "lm", position=position_dodge(width = zwidth), se = FALSE) +
-  scale_x_continuous(labels = c(2022, 2023), breaks = c(2022, 2023), limits = c(2021.9, 2023.15)) +
-  geom_text_repel(data = filter(plot_veg_mean_cov, 
-                          year == 2023, 
-                          treatment == "none", 
-                          cover.type == "abs.cover", 
-                          FunGrp == "Shrub", 
-                          nat.nnat.inv == "Native"), aes(label = point, x = 2023, y = mean.cov), nudge_x = .2, size = 2.5) +
-  labs(x = "Year",
-       title = "Mean woody plant % cover",
-       color = "Treatment",
-       y = "% cover") +
-  theme_bw()
-```
-
-
-
-
-```{r}
-plot_fungrp_spec_cover_trt_resp <- function(zFunGrp) {
+plot_fungrp_spec_cover_trt_resp <- function(zcover.type = "abs.cover", zFunGrp, znat.nnat.inv = c("Non-native", "Invasive", "Native")) {
 zdat <- plot_veg_mean_cov %>% 
-  filter(cover.type == "abs.cover", FunGrp == zFunGrp)
+  filter(cover.type == "abs.cover", FunGrp == zFunGrp, nat.nnat.inv %in% znat.nnat.inv)
 
 
   ggplot(zdat) +
-  stat_smooth(data = filter(zdat, treatment == "none"), aes(x = year, y = mean.cov, color = treatment, group = point), method = "lm", se = FALSE, linetype = 2) +
+  stat_smooth(data = filter(zdat, treatment == "none"), aes(x = year, y = cover, color = treatment, group = point), method = "lm", se = FALSE, linetype = 2) +
   geom_point(aes(x = year, y = grand.mean.cov, color = treatment), position=position_dodge(width = zwidth), size = 2) +
   geom_errorbar(aes(x = year, ymin = grand.mean.cov - sd.grand.mean.cov, ymax = grand.mean.cov + sd.grand.mean.cov, color = treatment), position=position_dodge(width = zwidth), width = 0.1) +
   stat_smooth(aes(x = year, y = grand.mean.cov, color = treatment), method = "lm", position=position_dodge(width = zwidth), se = FALSE) +
   scale_x_continuous(labels = c(2022, 2023), breaks = c(2022, 2023), limits = c(2021.9, 2023.5)) +
   geom_text_repel(data = filter(zdat, 
                           year == 2023, 
-                          treatment == "none"), aes(label = point, x = 2023, y = mean.cov), nudge_x = .2, size = 2.5) +
+                          treatment == "none"), aes(label = point, x = 2023, y = cover), nudge_x = .2, size = 2.5) +
   labs(x = "Year",
        y = "% cover",
        color = "Treatment",
@@ -154,33 +111,58 @@ zdat <- plot_veg_mean_cov %>%
     expand_limits(y = 0)
 }
 ```
+  
+  
+  
+# Did we see any vegetation change after the first year of prescribed grazing?  
 
+Below is a brief summary of the plant data from the first post-treatment year of our prescribed disturbance project.
+
+We have data from both years for 4 plots:  
+
+* CGRC-01 is our control plot  
+* CGRC-02 was grazed in the late summer of 2022 (after the 2022 veg measurements)  
+* CGRC-03 and CGRC-05 are scheduled for treatment in late summer/early fall 2023  
+ 
+
+Thus, in summer 2023 we have data for three untreated plots to compare to our one treated plot. I separated plant species observed at Cypress Grove into functional groups and whether they were native, non-native, or invasive, the calculated the absolute percent cover and species richness for each group. There are a couple things to keep in mind with these calculations: 1) Non-native and invasive are mutually exclusive groups; species classified as invasive are not also included in invasive, and 2) absolute cover includes overlapping layers, so total cover, even within a group, may sum to >100%. In all figures below, for untreated plots, the solid lines show the average change across all untreated plots and in the treated plot, and the dashed lines show the change for each untreated plot to give a sense of the variability.  
+
+Overall, you can see that the data are quite noisy, and in particular there was substantial variability in the cover and species richness the untreated plots. Thus there isn't a clear overall treatment effect evident across all plant groups. However, there are a few instances where there seem to be meaningful treatment effects. There is some suggestion that both non-native grass and native forb % cover increased meaningfully in the grazed plots. This latter potential result is interesting because there was a decrease in native forb richness in the grazed plot from 3 to only a single species: coast tarweed (Madia sativa). Coast tarweed appeared to have a strong growth spring in general at Cypress Grove in 2023.   
+
+We may expect more consistent treatment effects across the full range of plant groups following multiple years of grazing and especially if we can time spring grazing to limit new invasive seeds from being produced. Anecdotally, the sheep apparently had limited capacity/opportunity to browse or knock down most of the larger Coyote brush in the treated plot. Our objectives around woody plant cover will likely need additional disturbance methods.     
+
+
+## First the % cover figures.    
 
 ```{r}
-plot_fungrp_spec_cover_trt_resp("Annual Grass")
+plot_fungrp_spec_cover_trt_resp(zFunGrp = "Shrub", znat.nnat.inv = "Native")
+```
+
+```{r}
+plot_fungrp_spec_cover_trt_resp(zFunGrp = "Annual Grass")
 ```
 
 
 ```{r}
-plot_fungrp_spec_cover_trt_resp("Annual Forb")
+plot_fungrp_spec_cover_trt_resp(zFunGrp = "Annual Forb")
 ```
 
 
 ```{r}
-plot_fungrp_spec_cover_trt_resp("Perennial Grass")
+plot_fungrp_spec_cover_trt_resp(zFunGrp = "Perennial Grass")
 ```
 
 
 ```{r}
-plot_fungrp_spec_cover_trt_resp("Perennial Forb")
+plot_fungrp_spec_cover_trt_resp(zFunGrp = "Perennial Forb")
 ```
 
-
+## And now species richness figures.   
 
 ```{r}
 
 
-richness <- get_fungrp_native_richness(lpi) %>% 
+richness <- get_fungrp_native_richness(long_lpi_assigned) %>% 
   left_join(treatments) %>%
   right_join(multi_year_points) %>% 
   group_by(year, FunGrp, nat.nnat.inv, treatment) %>% 
@@ -205,7 +187,7 @@ zdat <- richness %>%
   labs(x = "Year",
        y = "# species",
        color = "Treatment",
-       title = paste("Mean", zFunGrp, "species richness")) +
+       title = paste(zFunGrp, "species richness")) +
   theme_bw() +
   facet_wrap(~nat.nnat.inv, scales = "free_y", ncol = 2) + 
     expand_limits(y = 0)
@@ -230,22 +212,24 @@ plot_fungrp_spec_rich_resp("Perennial Grass")
 ```{r}
 plot_fungrp_spec_rich_resp("Perennial Forb")
 ```
+  
+  
+# And finally a table of all plant species detected at each point in each year.   
+
 
 ```{r}
 spp <- read.csv(here("data/CGRC_plant_species_list.csv")) %>% 
-  mutate(year = year(as.Date(Event.Date))) %>% 
+  rename("Date"  = Event.Date,
+         "USDA.code" = USDA.Code) %>% 
+  clean_date_year() %>% 
   split_point_id() %>% 
-  distinct(point, year, USDA.Code) %>%
-  left_join(read.csv(here("data/helper_files/CAPlantsv2.csv"))%>% dplyr::select('USDA.Code' = Symbol, Scientific.Name, Common.Name, Native.Status, Invasive, FunGrp1, FunGrp2, FunGrp, Growth.Habit)) %>% 
-    mutate(nat.nnat.inv = case_when(grepl("L48 \\(N\\)", Native.Status) ~ "Native",
-                                    grepl("L48 \\(I\\)", Native.Status) & !grepl("Cal-IPC", Invasive)~ "Non-native",
-                                    grepl("L48 \\(I\\)", Native.Status) & grepl("Cal-IPC", Invasive) ~ "Invasive"),
-           FunGrp = case_when(FunGrp == "ShrubsTrees" & grepl("hrub", Growth.Habit) ~ "Shrub",
-                              FunGrp == "ShrubsTrees" & !grepl("hrub", Growth.Habit) ~ "Tree",
-                              TRUE ~ as.character(FunGrp)))
+  distinct(point, year, USDA.code) %>%
+  assign_functional_group_status()
   
-spp %>% 
+
+long_lpi_assigned %>% 
   right_join(multi_year_points) %>% 
+  distinct(point, Common.Name, Scientific.Name, year, FunGrp, nat.nnat.inv) %>% 
   mutate(observed = "Y",
          point.year = paste(point, year, sep = ", "),
          species = paste(Common.Name, " (", Scientific.Name, ")", sep = "")) %>% 
