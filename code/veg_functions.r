@@ -15,16 +15,39 @@
 #' @examples long_lpi <- lengthen_lpi(lpi)
 lengthen_lpi <- function(lpi) {
   
-  non_spp = c("", "2FA", "2FORB", "2FP", "2GA", "2GP", "2LICHN",
-              "2LTR", "2LTRWS",  "2PLANT",  "2W", "NOPLANT", "L", "WL")
-  
 long_lpi = lpi %>% 
   pivot_longer(cols = c(Canopy1, Canopy2, Canopy3, Top.Layer, Lower1, Lower2, Lower3, Lower4, Lower5, Lower6, Lower7, Lower8, Lower9, Lower10, Soil.Surface),
                names_to = "layer",
                values_to = "USDA.code") %>% 
-  filter(!is.na(USDA.code), USDA.code != "", !USDA.code %in% non_spp)
+  filter(!is.na(USDA.code), USDA.code != "")
 }
 
+
+#' @title drop_non_plants
+#' 
+#' @description
+#' remove non plant records
+#' 
+#'
+#' @param df 
+#'
+#' @return
+#' @export
+#' 
+#' @details
+#' currently removes USDA.code == c(2FA", "2FORB", "2FP", "2GA", "2GP", "2LICHN", "2LTR", "2LTRWS",  "2PLANT",  "2W", "NOPLANT", "L", "WL", "2GRAM", "S")
+#' 
+#'
+#' @examples
+drop_non_plants <- function(df) {
+  
+  non_spp = c("2FA", "2FORB", "2FP", "2GA", "2GP", "2LICHN",
+              "2LTR", "2LTRWS",  "2PLANT",  "2W", "NOPLANT", "L", "WL", "2GRAM", "S")
+  
+  df <- df %>% 
+    filter(!USDA.code %in% non_spp)
+  
+}
 
 #' assign_functional_group
 #' 
@@ -57,41 +80,36 @@ assign_functional_group_status <- function(df, CAPlants = read.csv(here("data/he
 
 
 
-#' get_fungrp_native_cover
+#' @title get_fungrp_native_cover
 #' 
-#' calculate percent cover by functional group and native/non-native status
+#' @description
+#'  calculate percent cover by functional group and native/non-native status
 #'
-#' @param lpi data frame with species assigned to functional group ("FunGrp") and native/non-native status ("nat.nnat.inv") 
+#' @param df data frame with species assigned to functional group ("FunGrp") and native/non-native status ("nat.nnat.inv"). Must also have a year column (added with clean_date_year()) and a point column (added with split_point_id())
 #'
 #' @return
 #' @export
 #' 
 #' @details
-#' calculates percent cover for each transect at each point
+#' calculates absolute and relative percent cover of each functional group at each point. Calculates relative cover using the total number of hits per point as the denominator; thus this denominator may be many more than the number of pins.
+#' 
 #' 
 #'
 #' @examples
-get_fungrp_native_cover = function(lpi){
+get_fungrp_native_cover = function(df){
 
-  # need number of hits per line to calculate relative cover
-  a <- lpi %>% 
-    group_by(Point.Id, year) %>% 
-    summarise(NumIndices = n())
 
-  a2 <- long_lpi %>% 
-    distinct(Point.Id, year, Point.Index) %>% 
-    group_by(Point.Id, year) %>% 
+  a <- df %>% 
+    distinct(point, Point.Id, year, Point.Index) %>% 
+    group_by(point, year) %>% 
     summarise(NumIndices = n())
   
-  
-  
-  a == a2
-  Fun.Sum <- longlpi %>% 
+  Fun.Sum <- df %>% 
     filter(!is.na(nat.nnat.inv)) %>% 
-    group_by(year, Point.Id, FunGrp, nat.nnat.inv) %>% 
+    group_by(year, point, FunGrp, nat.nnat.inv) %>% 
     summarise(Count = n()) %>%
     ungroup() %>% 
-    group_by(Point.Id, year) %>% 
+    group_by(point, year) %>% 
     mutate(group.hits = sum(Count)) %>% 
     ungroup() %>% 
     full_join(a) %>% 
@@ -115,14 +133,15 @@ get_fungrp_native_cover = function(lpi){
 #' calculates percent cover for each transect at each point
 #' 
 #' @examples
-get_species_cover = function(lpi){
+get_species_cover = function(df){
 
-  # need number of hits per line to calculate relative cover
-  a <- lpi %>% 
-    group_by(Point.Id, year) %>% 
+  
+  a <- df %>% 
+    distinct(point, Point.Id, year, Point.Index) %>% 
+    group_by(point, year) %>% 
     summarise(NumIndices = n())
   
-  Fun.Sum <- longlpi %>% 
+  Fun.Sum <- df %>% 
     filter(!is.na(nat.nnat.inv)) %>% 
     group_by(Transect.Name, Point.Id, year, USDA.code) %>% 
     summarise(Count = n()) %>%
@@ -153,18 +172,14 @@ get_species_cover = function(lpi){
 #'
 #' @examples
 get_fungrp_native_richness = function(df){
-if(!names(df) %in% c("point"))  {
-df <- df %>% 
-   separate(Point.Id, 
-           into = c("point", "line"), 
-           sep = "(?<=[0-9])(?=[A-Za-z])", remove = FALSE)
-}
+
   
 df <- df %>%   
-    distinct(point, year, USDA.code) %>% 
-    filter(!is.na(nat.nnat.inv)) %>% 
+  filter(!is.na(nat.nnat.inv)) %>%
+    distinct(point, year, USDA.code, FunGrp, nat.nnat.inv) %>%  
     group_by(point, year, FunGrp, nat.nnat.inv) %>% 
-    summarize(richness = n())
+    summarise(richness = n(),
+              species = paste(USDA.code, collapse = ", "))
   
   }
 
