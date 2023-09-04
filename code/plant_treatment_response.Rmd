@@ -46,7 +46,8 @@ lpi <- read.csv(here("data/CGRC_LPI.csv")) %>%
 long_lpi <- lengthen_lpi(lpi)
 
 long_lpi_assigned <- assign_functional_group_status(long_lpi) %>% 
-  split_point_id()
+  split_point_id() %>% 
+  drop_non_plants()
 
 multi_year_points <- long_lpi_assigned %>% 
  distinct(year, point) %>% 
@@ -69,14 +70,6 @@ plot_veg_mean_cov <- veg_cover %>%
   mutate(abs.cover = ifelse(is.na(abs.cover), 0, abs.cover),
          rel.cover = ifelse(is.na(rel.cover), 0, rel.cover)) %>% 
   pivot_longer(cols = contains("cover"), names_to = "cover.type", values_to = "cover") %>% 
-  #group_by(year, point, FunGrp, nat.nnat.inv, cover.type) %>% 
-  #summarise(n.line = n(),
-  #          mean.cov = mean(cover),
-  #          sd.cover = sd(cover)) %>% 
-  #ungroup() %>% 
-  #mutate(se.cover = sd.cover/sqrt(n.line),
-  #       lwr.se = mean.cov - se.cover,
-  #       upr.se = mean.cov + se.cover) %>% 
   left_join(treatments)  %>% 
   right_join(multi_year_points)%>% 
   group_by(year, FunGrp, nat.nnat.inv, cover.type, treatment) %>% 
@@ -218,16 +211,9 @@ plot_fungrp_spec_rich_resp("Perennial Forb")
 
 
 ```{r}
-spp <- read.csv(here("data/CGRC_plant_species_list.csv")) %>% 
-  rename("Date"  = Event.Date,
-         "USDA.code" = USDA.Code) %>% 
-  clean_date_year() %>% 
-  split_point_id() %>% 
-  distinct(point, year, USDA.code) %>%
-  assign_functional_group_status()
-  
 
 long_lpi_assigned %>% 
+  filter(!is.na(FunGrp)) %>% 
   right_join(multi_year_points) %>% 
   distinct(point, Common.Name, Scientific.Name, year, FunGrp, nat.nnat.inv) %>% 
   mutate(observed = "Y",
