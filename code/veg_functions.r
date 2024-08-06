@@ -99,20 +99,19 @@ assign_functional_group_status <- function(df, CAPlants = read.csv(here("data/he
 get_fungrp_native_cover = function(df){
 
 
-  a <- df %>% 
+  all_point_indices <- df %>% 
     distinct(point, Point.Id, year, Point.Index) %>% 
     group_by(point, year) %>% 
     summarise(NumIndices = n())
   
   Fun.Sum <- df %>% 
-    filter(!is.na(nat.nnat.inv)) %>% 
     group_by(year, point, FunGrp, nat.nnat.inv) %>% 
     summarise(Count = n()) %>%
     ungroup() %>% 
     group_by(point, year) %>% 
     mutate(group.hits = sum(Count)) %>% 
     ungroup() %>% 
-    full_join(a) %>% 
+    full_join(all_point_indices) %>% 
     mutate(abs.cover = (Count/NumIndices) * 100,
            rel.cover = (Count/group.hits) * 100)
 }
