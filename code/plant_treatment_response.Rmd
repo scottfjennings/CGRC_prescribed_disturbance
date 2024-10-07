@@ -41,18 +41,34 @@ percent_cover <- readRDS(here("data/derived/percent_cover"))
 
 richness <- readRDS(here("data/derived/richness"))
 
+points_years_treatments <- readRDS(here("data/derived/points_years_treatments"))  %>% 
+  rename(year = treatment.effect.year) %>% 
+  select(point, year, treatment)%>% 
+  mutate(treat.lump = ifelse(treatment %in% c("none", "before treatment"), "untreated", treatment))
 
-points_years_treatments <- readRDS(here("data/derived/points_years_treatments")) 
+points_years_monitoring <- percent_cover %>% 
+  distinct(point, year)
+
+drop_points <- c("CGRC-07", "CGRC-08")
+
+# treated point and label position jitter
+pos <- position_jitter(height = 0.1, seed = 2)
+
+```
+
+
+
+```{r include = FALSE}
 
 treatment_hx <- points_years_treatments %>% 
   group_by(point, treatment) %>% 
   mutate(treat.year = row_number()) %>% 
   ungroup() %>% 
   mutate(zyears = ifelse(treat.year == 1, "year", "years"),
-         treat.hx.year = ifelse(treatment != "none", paste(treatment, ", ", treat.year, " ", zyears, sep = ""), treatment),
-         treat.hx.year = factor(treat.hx.year, levels = c("none", "grazed, 1 year", "grazed, 2 years", "hand clear, 1 year"))) 
+         treat.hx.year = ifelse(!treatment %in% c("none", "before treatment"), paste(treatment, ", ", treat.year, " ", zyears, sep = ""), treatment),
+         treat.hx.year = factor(treat.hx.year, levels = c("none", "before treatment", "grazed, 1 year", "grazed, 2 years", "hand clear, 1 year"))
+         ) 
   
-drop_points <- c("CGRC-07", "CGRC-08")
 
 ```
   
@@ -60,16 +76,16 @@ drop_points <- c("CGRC-07", "CGRC-08")
 
 ```{r}
 
-points_years_treatments %>% 
 ggplot() +
-  geom_tile(aes(y = reorder(point, desc(point)), x = year, fill = treatment), color = "black") +
+  geom_tile(data = points_years_treatments, aes(y = reorder(point, desc(point)), x = year, fill = treatment), color = "black") +
+  scale_fill_manual(values = c("#4DAF4A", "#E41A1C", "#377EB8", "#999999")) +
+  #scale_fill_brewer(palette = "Dark2") +
   labs(title = "Treatment history at each point",
        x = "",
        y = "",
        fill = "Treatment",
        caption = "Areas without color indicate no vegetation monitoring for that plot/year.") +
-  theme_bw()
-
+  theme_minimal()
 
 ```
 
@@ -82,81 +98,95 @@ Percent cover
 ```{r}
 per_cov_treat <- percent_cover %>% 
   filter(!point %in% drop_points, cover.type == "abs.cover") %>%
-  full_join(treatment_hx) %>% 
-  group_by(FunGrp, nat.nnat.inv, treat.hx.year) %>% 
-  mutate(mean.cov = mean(cover),
+  full_join(points_years_treatments) 
+
+mean_untreated_per_cover <- per_cov_treat %>% 
+  filter(treat.lump == "untreated") %>% 
+  group_by(FunGrp, nat.nnat.inv) %>% 
+  summarise(mean.cov = mean(cover),
             sd.cov = sd(cover)) %>% 
-  ungroup() %>% 
-  filter(!(FunGrp == "Annual Grass" & nat.nnat.inv == "Native"), !(nat.nnat.inv == "Invasive" & FunGrp == "Perennial Forb")) %>% 
-  filter(!str_detect(treat.hx.year, "hand clear"))
+  ungroup()
+
+#  filter(!(FunGrp == "Annual Grass" & nat.nnat.inv == "Native"), !(nat.nnat.inv == "Invasive" & FunGrp == "Perennial Forb"))
+
+
+
+
+
 ```
 
 
 Forbs  
 Grazing appears to have increased native annual forb percent cover in both treated plots and may also have increased native perennial forb cover in both plots.  
+
   
 ```{r fig.height = 4}
 
-
-ggplot() +
-  geom_rect(data = filter(per_cov_treat, treat.hx.year == "none", str_detect(FunGrp, "Forb")), aes(ymax = Inf, ymin = -Inf, xmin = mean.cov - sd.cov, xmax = mean.cov + sd.cov), fill = "gray", alpha = 0.25) +
-  geom_vline(data = filter(per_cov_treat, treat.hx.year == "none", str_detect(FunGrp, "Forb")), aes(xintercept = mean.cov)) +
-  geom_point(data = filter(per_cov_treat, treat.hx.year != "none", str_detect(FunGrp, "Forb")), aes(y = reorder(treat.hx.year, desc(treat.hx.year)), x = cover, color = treat.hx.year, shape = point), size = 3, alpha = 0.75) +
-  geom_beeswarm(data = filter(per_cov_treat, treat.hx.year == "none" & point %in% c("CGRC-02", "CGRC-04"), str_detect(FunGrp, "Forb")), aes(y = reorder(treat.hx.year, desc(treat.hx.year)), x = cover, shape = point), color = "gray30", size = 2, alpha = 0.5, dodge.width = 0.75) +
+fungrp_cover_plotter <- function(zfungrp) {
+fungrp_df <- filter(per_cov_treat, str_detect(FunGrp, zfungrp))
+mean_untreated <- filter(mean_untreated_per_cover, str_detect(FunGrp, zfungrp))
+  
+cov_plot <- ggplot() +
+  geom_rect(data = mean_untreated, aes(ymax = Inf, ymin = -Inf, xmin = mean.cov - sd.cov, xmax = mean.cov + sd.cov), fill = "gray", alpha = 0.25) +
+  geom_vline(data = mean_untreated, aes(xintercept = mean.cov)) +
+  geom_point(data = filter(fungrp_df, treat.lump != "untreated"), aes(y = reorder(treat.lump, desc(treat.lump)), x = cover, color = treatment, shape = point), size = 3, position = pos) +
+  geom_beeswarm(data = filter(fungrp_df, treatment == "before treatment"), aes(y = reorder(treat.lump, desc(treat.lump)), x = cover, shape = point, color = treatment), size = 2, dodge.width = 0.75) +
+  geom_beeswarm(data = filter(fungrp_df, treatment == "none"), aes(y = reorder(treat.lump, desc(treat.lump)), x = cover, color = treatment), size = 2, dodge.width = 0.75) +
+  geom_text_repel(data = filter(fungrp_df, treat.lump != "untreated"),
+                  aes(y = reorder(treat.lump, desc(treat.lump)), x = cover, 
+                 color = treatment, label = year),
+                  size = 4,
+                 #min.segment.length = Inf, 
+                 position = pos,
+                  box.padding   = .5,
+                  segment.size = 0.1,
+                  segment.color = "grey50")  +
+  geom_beeswarm(data = filter(fungrp_df, treatment == "none"), aes(y = reorder(treat.lump, desc(treat.lump)), x = cover), color = "gray30", size = 2, dodge.width = 0.75) +
   theme_bw() +
   facet_grid(FunGrp~nat.nnat.inv, scales = "free_x") +
   labs(x = "% cover",
        y = "",
        shape = "Treated points",
-       caption = "black line and gray area show the mean and range of untreated plots/years",
+       caption = "Untreated includes points not assigned to treatment and assigned points in years before treatment.\nBlack line and gray area show the mean  ± 1 standard deviation of untreated plots/years.",
        title = "Percent forb cover in treated plots") + 
-  scale_color_brewer(guide = "none", palette = "Dark2")
+  scale_color_manual(guide = "none", values = c("#4DAF4A", "#E41A1C", "#377EB8", "#999999")) +
+  theme(plot.caption.position = "plot")
 
-ggsave(here(paste("figures/forb_cover_treatments", year(Sys.Date()), ".png", sep = "")), width = 8)
+ggsave(here(paste("figures/", zfungrp, "_cover_treatments", year(Sys.Date()), ".png", sep = "")), width = 8)
+
+return(cov_plot)
+
+}
+
 
 ```
+
+  
+```{r fig.height = 4}
+fungrp_cover_plotter("Forb")
+
+```
+
+
 
 Grasses  
 Grazing appears to have led to strong increases in non-native annual grasses in both treated plots, which is what we expect in the first few years of disturbance. Grazing may also have been associated with increased percent cover for native perennial grasses as well.  
 
 
 ```{r fig.height = 4}
-ggplot() +
-  geom_rect(data = filter(per_cov_treat, treat.hx.year == "none", str_detect(FunGrp, "Grass")), aes(ymax = Inf, ymin = -Inf, xmin = mean.cov - sd.cov, xmax = mean.cov + sd.cov), fill = "gray", alpha = 0.25) +
-  geom_vline(data = filter(per_cov_treat, treat.hx.year == "none", str_detect(FunGrp, "Grass")), aes(xintercept = mean.cov)) +
-  geom_point(data = filter(per_cov_treat, treat.hx.year != "none", str_detect(FunGrp, "Grass")), aes(y = reorder(treat.hx.year, desc(treat.hx.year)), x = cover, color = treat.hx.year, shape = point), size = 3, alpha = 0.75) +
-  geom_beeswarm(data = filter(per_cov_treat, treat.hx.year == "none" & point %in% c("CGRC-02", "CGRC-04"), str_detect(FunGrp, "Grass")), aes(y = reorder(treat.hx.year, desc(treat.hx.year)), x = cover, shape = point), color = "gray30", size = 2, alpha = 0.5, dodge.width = 0.75) +
-  theme_bw() +
-  facet_grid(FunGrp~nat.nnat.inv, scales = "free_x") +
-  labs(x = "% cover",
-       y = "",
-       shape = "Treated points",
-       caption = "black line and gray area show the mean and range of untreated plots/years",
-       title = "Percent grass cover in treated plots") + 
-  scale_color_brewer(guide = "none", palette = "Dark2")
 
-ggsave(here(paste("figures/grass_cover_treatments", year(Sys.Date()), ".png", sep = "")), width = 8)
+fungrp_cover_plotter("Grass")
 ```
 
 Shrubs  
 Grazing appears to be reducing the cover of shrubby plants in both treated plots.  
   
 ```{r fig.height = 2.5}
-ggplot() +
-  geom_rect(data = filter(per_cov_treat, treat.hx.year == "none", FunGrp == "Shrub", nat.nnat.inv == "Native"), aes(ymax = Inf, ymin = -Inf, xmin = mean.cov - sd.cov, xmax = mean.cov + sd.cov), fill = "gray", alpha = 0.25) +
-  geom_vline(data = filter(per_cov_treat, treat.hx.year == "none", , FunGrp == "Shrub", nat.nnat.inv == "Native"), aes(xintercept = mean.cov)) +
-  geom_point(data = filter(per_cov_treat, treat.hx.year != "none", , FunGrp == "Shrub", nat.nnat.inv == "Native"), aes(y = reorder(treat.hx.year, desc(treat.hx.year)), x = cover, color = treat.hx.year, shape = point), size = 3, alpha = 0.75) +
-  geom_beeswarm(data = filter(per_cov_treat, treat.hx.year == "none" & point %in% c("CGRC-02", "CGRC-04"), , FunGrp == "Shrub", nat.nnat.inv == "Native"), aes(y = reorder(treat.hx.year, desc(treat.hx.year)), x = cover, shape = point), color = "gray30", size = 2, alpha = 0.5, dodge.width = 0.75) +
-  theme_bw() +
-  facet_grid(FunGrp~nat.nnat.inv, scales = "free_x") +
-  labs(x = "% cover",
-       y = "",
-       shape = "Treated points",
-       caption = "black line and gray area show the mean and range of untreated plots/years",
-       title = "Percent shrub cover in treated plots") + 
-  scale_color_brewer(guide = "none", palette = "Dark2")
 
-ggsave(here(paste("figures/shrub_cover_treatments", year(Sys.Date()), ".png", sep = "")), width = 8)
+
+fungrp_cover_plotter("Shrub")
+
+
 ```
 
 Species richness  
@@ -165,29 +195,49 @@ Grazing may be associated with increased number of invasive annual grass species
 
 ```{r fig.height = 6}
 richness_treat <- richness %>% 
-  filter(!point %in% drop_points) %>%
-  full_join(treatment_hx) %>% 
-  group_by(FunGrp, nat.nnat.inv, treat.hx.year) %>% 
-  mutate(mean.richness = mean(richness),
-            sd.richness = sd(richness)) %>% 
-  ungroup() %>% 
-  filter(str_detect(FunGrp, "Grass|Forb")) %>% 
-  filter(!(FunGrp == "Annual Grass" & nat.nnat.inv == "Native"), !(nat.nnat.inv == "Invasive" & FunGrp == "Perennial Forb")) %>% 
-  filter(!str_detect(treat.hx.year, "hand clear"))
+  filter(!point %in% drop_points) %>%  
+  filter(str_detect(FunGrp, "Grass|Forb")) %>% # grass and forb are the only functional groups with meaningful spp richness
+  filter(!(FunGrp == "Annual Grass" & nat.nnat.inv == "Native"), !(nat.nnat.inv == "Invasive" & FunGrp == "Perennial Forb")) %>%  # but there aren't really any native annual grasses or invasive perennial forbs
+  left_join(points_years_treatments)
+  
+  
+  mean_untreat_richness <- richness_treat %>% 
+    filter(treat.lump == "untreated") %>% 
+    group_by(FunGrp, nat.nnat.inv) %>%
+    summarise(mean.richness = mean(richness),
+              sd.richness = sd(richness)) %>%
+    ungroup()
+
+```
+
+
+
+```{r}
 
 ggplot() +
-  geom_rect(data = filter(richness_treat, treat.hx.year == "none"), aes(ymax = Inf, ymin = -Inf, xmin = mean.richness - sd.richness, xmax = mean.richness + sd.richness), fill = "gray", alpha = 0.25) +
-  geom_vline(data = filter(richness_treat, treat.hx.year == "none"), aes(xintercept = mean.richness)) +
-  geom_point(data = filter(richness_treat, treat.hx.year != "none"), aes(y = reorder(treat.hx.year, desc(treat.hx.year)), x = richness, color = treat.hx.year, shape = point), size = 3, alpha = 0.75) +
-  geom_beeswarm(data = filter(richness_treat, treat.hx.year == "none" & point %in% c("CGRC-02", "CGRC-04")), aes(y = reorder(treat.hx.year, desc(treat.hx.year)), x = richness, shape = point), color = "gray30", size = 2, alpha = 0.5, dodge.width = 0.75) +
+  geom_rect(data = mean_untreat_richness, aes(ymax = Inf, ymin = -Inf, xmin = mean.richness - sd.richness, xmax = mean.richness + sd.richness), fill = "gray", alpha = 0.25) +
+  geom_vline(data = mean_untreat_richness, aes(xintercept = mean.richness)) +
+  geom_point(data = filter(richness_treat, treat.lump != "untreated"), aes(y = reorder(treat.lump, desc(treat.lump)), x = richness, color = treatment, shape = point), size = 3, position = pos) +
+  geom_beeswarm(data = filter(richness_treat, treatment == "before treatment"), aes(y = reorder(treat.lump, desc(treat.lump)), x = richness, shape = point, color = treatment), size = 2, dodge.width = 0.75) +
+  geom_beeswarm(data = filter(richness_treat, treatment == "none"), aes(y = reorder(treat.lump, desc(treat.lump)), x = richness, color = treatment), size = 2, dodge.width = 0.75) +
+  geom_text_repel(data = filter(richness_treat, treat.lump != "untreated"),
+                  aes(y = reorder(treat.lump, desc(treat.lump)), x = richness, 
+                 color = treatment, label = year),
+                  size = 4,
+                 #min.segment.length = Inf, 
+                 position = pos,
+                  box.padding   = .5,
+                  segment.size = 0.1,
+                  segment.color = "grey50")  +
   theme_bw() +
   facet_grid(FunGrp~nat.nnat.inv, scales = "free_x") +
   labs(title = "Grass and forb species richness in treated plots",
        x = "# of species",
        y = "",
        shape = "Treated points",
-       caption = "black line and gray area show the mean and range of untreated plots/years") + 
-  scale_color_brewer(guide = "none", palette = "Dark2")
+       caption = "Untreated includes points not assigned to treatment and assigned points in years before treatment.\nBlack line and gray area show the mean  ± 1 standard deviation of untreated plots/years")   +
+  scale_color_manual(guide = "none", values = c("#4DAF4A", "#E41A1C", "#377EB8", "#999999")) +
+  theme(plot.caption.position = "plot")
 
 
 ggsave(here(paste("figures/grass_forb_richness_treatments", year(Sys.Date()), ".png", sep = "")), width = 8)
