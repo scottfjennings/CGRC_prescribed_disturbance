@@ -36,7 +36,7 @@ return(df_out)
 #' @examples
 birds_per_area_date <- function(df) {
   df_out <- df %>%
-    group_by(point, date, alpha.code, common.name) %>% 
+    group_by(point, date, alpha.code) %>% 
     summarise(tot.Count = sum(count)) %>% 
     ungroup()
 }
@@ -45,7 +45,7 @@ birds_per_area_date <- function(df) {
 
 #' birds_per_area_year
 #'
-#' calculate the mean and standard deviation number of individuals of each species detected at each plot each year, and number of dates within each year that each species was detected at each plot
+#' calculate the mean and standard deviation number of individuals of each species detected at each point each year, and number of dates within each year that each species was detected at each point
 #'
 #' @param df 
 #'
@@ -55,11 +55,11 @@ birds_per_area_date <- function(df) {
 #' @examples
 birds_per_area_year <- function(df) {
   df_out <- df %>%
-    group_by(point, date, alpha.code, common.name) %>% 
+    group_by(point, date, alpha.code) %>% 
     summarise(tot.count = sum(count)) %>% 
     ungroup() %>% 
     mutate(year = lubridate::year(date)) %>% 
-    group_by(point, year, alpha.code, common.name) %>% 
+    group_by(point, year, alpha.code) %>% 
     summarise(mean.birds = mean(tot.count),
               sd.birds = sd(tot.count),
               num.dates = n())
@@ -70,7 +70,7 @@ birds_per_area_year <- function(df) {
 
 #' species_per_area_date
 #'
-#' calculate the  number of species detected at each plot each date
+#' calculate the  number of species detected at each point each date
 #' 
 #' @param df 
 #'
@@ -90,7 +90,7 @@ species_per_area_date <- function(df) {
 
 #' species_per_area_year
 #' 
-#' calculate the mean and standard deviation number of species detected at each plot each year
+#' calculate the mean and standard deviation number of species detected at each point each year
 #'
 #' @param df 
 #'
@@ -99,13 +99,23 @@ species_per_area_date <- function(df) {
 #'
 #' @examples
 species_per_area_year <- function(df) {
-  df_out <- df %>%
+  df1 <- df %>% 
     distinct(point, date, alpha.code) %>% 
     group_by(point, date) %>% 
     summarise(spp.per.area = n()) %>% 
-    ungroup()%>% 
+    ungroup() %>% 
     mutate(year = lubridate::year(date)) %>% 
     group_by(point, year) %>% 
     summarise(mean.species = mean(spp.per.area),
               sd.species = sd(spp.per.area))
+  
+  df2 <- df %>%
+    mutate(year = lubridate::year(date)) %>% 
+    distinct(point, year, alpha.code) %>% 
+    group_by(point, year) %>% 
+    summarise(spp.per.point.year = n()) %>% 
+    ungroup()  
+
+  df_out <- full_join(df1, df2)
+    
 }
