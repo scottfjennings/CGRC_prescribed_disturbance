@@ -1,0 +1,181 @@
+---
+title: "Summary of bird response to grazing"
+output: word_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      error = FALSE)
+```
+
+
+
+```{r}
+
+library(tidyverse)
+library(lubridate)
+library(ggrepel)
+library(flextable)
+library(here)
+library(cowplot)
+library(ggbeeswarm)
+library(birdnames)
+
+source(here("code/bird_functions.R"))
+
+```
+
+```{r}
+
+points_years_treatments <- readRDS(here("data/derived/points_years_treatments")) 
+
+treated_points <- points_years_treatments %>% 
+  filter(!treatment %in% c("none", "before treatment")) %>% 
+  distinct(point, treatment) %>% 
+  rename(treatment.type = treatment)
+
+birds_area_year <- readRDStreatmentbirds_area_year <- readRDS(here("data/derived/birds_area_year")) 
+
+species_area_year <- readRDS(here("data/derived/species_area_year")) 
+
+
+cgrc_birds <- readRDS(here("data/derived/cgrc_birds"))
+
+
+```
+
+# Did we see any change in bird abundance or species diversity after the first year of prescribed grazing?  
+
+Below is a brief summary of the bird data from our prescribed disturbance project.
+
+There isn't a clear overall treatment effect evident for either number of individual birds or number of bird species. In both cases, the number of individuals and species counted in treated plots after treatment was well within the range of observed values counted in untreated plots or before treatment.
+
+
+```{r fig.width=7}
+treated_birds <- filter(birds_area_year, !treatment %in% c("none", "before treatment"))
+
+no_treat_birds <- birds_area_year %>% 
+  filter(treatment %in% c("none", "before treatment")) %>% 
+  mutate(treatment = "no treatment/\nbefore treatment")
+
+no_treat_birds_mean <- no_treat_birds %>% 
+  summarise(mean.birds = mean(total.birds),
+         sd.birds = sd(total.birds)) %>% 
+  ungroup() 
+
+ggplot() +
+  geom_rect(data = no_treat_birds_mean, aes(ymax = Inf, ymin = -Inf, xmin = mean.birds - sd.birds, xmax = mean.birds + sd.birds), fill = "gray30", alpha = 0.25) +
+  geom_vline(data = no_treat_birds_mean, aes(xintercept = mean.birds)) +
+  geom_beeswarm(data = treated_birds, 
+             aes(y = reorder(treatment, desc(treatment)), x = total.birds, 
+                 color = treatment, shape = point, label = year), size = 3, alpha = 0.75)+
+  geom_text_repel(data          = treated_birds,
+                  aes(y = reorder(treatment, desc(treatment)), x = total.birds, 
+                 color = treatment, label = year),
+                  size          = 4,
+                  box.padding   = .75,
+                  segment.size  = 0.1,
+                  segment.color = "grey50")  +
+  geom_beeswarm(data = no_treat_birds, aes(y = reorder(treatment, desc(treatment)), x = total.birds), color = "gray30", size = 2, alpha = 0.5, dodge.width = 0.75) +
+  theme_bw() +
+  labs(x = "Average # of birds",
+       y = "",
+       shape = "Treated points",
+       caption = "black line and gray area show the mean  ± 1 standard deviation of all untreated plots/years",
+       title = "Average number of birds counted per survey") + 
+  scale_color_brewer(guide = "none", palette = "Dark2")
+
+
+```
+
+```{r fig.width=7}
+treated_species <- filter(species_area_year, !treatment %in% c("none", "before treatment"))
+
+
+no_treat_species <- filter(species_area_year, treatment %in% c("none", "before treatment")) %>% 
+  mutate(treatment = "no treatment/\nbefore treatment")
+
+no_treat_species_mean <- no_treat_species %>% 
+  summarise(mean.species = mean(spp.per.point.year),
+         sd.species = sd(spp.per.point.year)) %>% 
+  ungroup() %>% 
+  mutate(sd.species = replace_na(sd.species, 0))
+
+
+pos <- position_jitter(height = 0.1, seed = 2)
+
+ggplot() +
+  geom_rect(data = no_treat_species_mean, aes(ymax = Inf, ymin = -Inf, xmin = mean.species - sd.species, xmax = mean.species + sd.species), fill = "gray30", alpha = 0.25) +
+  geom_vline(data = no_treat_species_mean, aes(xintercept = mean.species)) +
+  geom_point(data = treated_species, aes(y = reorder(treatment, desc(treatment)), x = spp.per.point.year, color = treatment, shape = point), size = 3, alpha = 0.5, dodge.width = 0.25, position = pos) +
+  geom_text_repel(data = treated_species,
+                  aes(y = reorder(treatment, desc(treatment)), x = spp.per.point.year, 
+                 color = treatment, label = year),
+                  size = 4,
+                 #min.segment.length = Inf, 
+                 position = pos,
+                  box.padding   = .5,
+                  segment.size = 0.1,
+                  segment.color = "grey50")  +
+  geom_beeswarm(data = no_treat_species, aes(y = reorder(treatment, desc(treatment)), x = spp.per.point.year), color = "gray30", size = 2, alpha = 0.5, dodge.width = 0.75) +
+  theme_bw() +
+  labs(x = "Total species counted",
+       y = "",
+       shape = "Treated points",
+       caption = "black line and gray area show the mean ± 1 standard deviation of all untreated plots/years",
+       title = "Total number of species counted in treated plots") + 
+  scale_color_brewer(guide = "none", palette = "Dark2")
+
+
+```
+
+
+```{r} 
+
+spp_table_wide <- cgrc_birds %>% 
+  distinct(point, year, alpha.code) %>% 
+  full_join(points_years_treatments %>% 
+              rename(year = treatment.effect.year)) %>% 
+  full_join(treated_points) %>% 
+  mutate(treatment.type = replace_na(treatment.type, "no treatment"),
+         before.after.treatment = ifelse(treatment %in% c("grazed", "hand clear"), "after treatment", treatment)) %>% 
+  distinct(treatment.type, before.after.treatment, treatment, alpha.code, year) %>% 
+  arrange(alpha.code) %>% 
+  mutate(common.name = translate_bird_names(alpha.code, "alpha.code", "common.name"))
+
+
+```
+
+When we look at presence vs absence of each species between grazed and hand cleared plots before and after treatment, 
+
+```{r fig.width=8, fig.height=10.5}
+
+spp_table_no_treat <- filter(spp_table_wide, treatment == "none") %>% 
+  select(-treatment.type)
+
+spp_table_treat <- filter(spp_table_wide, treatment != "none")
+
+ggplot() +
+  geom_tile(data = spp_table_no_treat, aes(y = common.name, x = year), fill = "gray40", color = "black") +
+  geom_point(data = spp_table_treat, aes(y = common.name, x = year, color = before.after.treatment), shape = 15, size = 4) + 
+  theme_classic() +
+  labs(x = "",
+       y = "",
+       fill = NULL,
+       color = NULL,
+       title = "Bird species detections in grazed and hand cleared\nplots before and after treatment.",
+       caption = "Smaller squares indicate the species was seen in treated plots that year and color shows whether the treatment had happened yet.\nDark gray indicates that species was detected in untreated plots that year.") +
+  scale_fill_brewer(type = "qual", palette = "Set1", direction = -1) +
+    theme(legend.position="bottom") +
+    scale_y_discrete(limits=rev) +
+  facet_wrap(~treatment.type)+ 
+  guides(colour = guide_legend(reverse=T))
+
+
+
+
+```
+
