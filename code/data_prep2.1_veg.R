@@ -13,19 +13,24 @@ options(scipen = 999)
 
 
 
-
 # read and clean veg data ----
 lpi <- read.csv(here("data/CGRC_LPI.csv")) %>% 
   clean_date_year() %>% # in general_functions
-  filter(!is.na(Direction))
+  filter(!is.na(Direction)) %>% 
+  split_point_id() # in general_functions
+
+points_years_treatments <- readRDS(here("data/derived/points_years_treatments")) %>% 
+  rename(year = treatment.effect.year) %>% 
+  select(point, year, treatment) %>% 
+  right_join(lpi %>% distinct(point, year))
 
 # make long format
 long_lpi <- lengthen_lpi(lpi) # in veg_functions
 
 # assign functional group, filter out non plants, cleaning
-long_lpi_assigned <- assign_functional_group_status(long_lpi) %>% # in veg_functions
-  split_point_id() %>%  # in general_functions
-  drop_non_plants() # in veg_functions
+long_lpi_assigned <- assign_functional_group_status(long_lpi) # in veg_functions
+
+
 
 saveRDS(long_lpi_assigned, here("data/derived/long_lpi_assigned"))
 
@@ -42,40 +47,23 @@ fun_groups = long_lpi_assigned %>%
   filter(!str_detect(FunGrp, "\\*"))
 
 
-# 1 set up df with plots and treatments across years ----
-treatments <- read.csv(here("data/treatment_history.csv")) %>% 
-  mutate(year = ifelse(before.after.monitoring == "before", treatment.year, treatment.year + 1)) %>% 
-  rename(point = plot)
-
-# make expanded df with all FunGrp and nat.nnat.inv for each point and year that we have plant data for, including treatment history 
-points_years <- long_lpi_assigned %>% 
-  distinct(point, year) 
-
-
-points_years_groups <- points_years %>% 
+# need this to expand the df out and fill 0s
+points_years_groups <- points_years_treatments %>% 
   merge(fun_groups) %>% 
   merge(data.frame(nat.nnat.inv = c("Non-native", "Invasive", "Native")))
 
-                                       
-points_years_treatments <- treatments %>% 
-  select(year, point, treatment) %>% 
-  full_join(points_years) %>% 
-  mutate(treatment = replace_na(treatment, "none"))
-
-saveRDS(points_years_treatments, here("data/derived/points_years_treatments"))
 
 # calculate percent cover ----
 percent_cover <- long_lpi_assigned %>% 
   filter(!is.na(FunGrp), !is.na(nat.nnat.inv)) %>% 
-  get_fungrp_native_cover() %>%
-  full_join(points_years_groups) %>% 
+  get_fungrp_native_cover() %>% # in veg_functions
+  full_join(points_years_groups) %>% # join with this to fill 0s 
   mutate(abs.cover = ifelse(is.na(abs.cover), 0, abs.cover),
          rel.cover = ifelse(is.na(rel.cover), 0, rel.cover)) %>% 
-  pivot_longer(cols = contains("cover"), names_to = "cover.type", values_to = "cover") %>% 
-  left_join(points_years_treatments %>% select(year, point, treatment)) %>% 
+  pivot_longer(cols = contains("cover"), names_to = "cover.type", values_to = "cover") %>% # this pivot should double the # of rows
   group_by(year, FunGrp, nat.nnat.inv, cover.type, treatment) %>% 
-  mutate(all.points.annual.mean.cov = mean(cover),
-         sd.all.points.annual.mean.cov = sd(cover)) %>% 
+  mutate(mean.all.points.annual.cov = mean(cover),
+         sd.all.points.annual.cov = sd(cover)) %>% 
   ungroup()  
 
 saveRDS(percent_cover, here("data/derived/percent_cover"))
@@ -83,6 +71,7 @@ saveRDS(percent_cover, here("data/derived/percent_cover"))
 # calculate species richness ----
 richness <- long_lpi_assigned %>% 
   filter(!is.na(FunGrp), !is.na(nat.nnat.inv)) %>% 
+  drop_non_plants() %>%  # in veg_functions. want to remove things not ID to species for calculating species richness
   get_fungrp_native_richness() %>%
   full_join(points_years_groups) %>% 
   mutate(richness = replace_na(richness, 0)) %>% 
