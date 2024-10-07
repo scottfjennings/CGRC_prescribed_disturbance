@@ -41,8 +41,10 @@ long_lpi = lpi %>%
 #' @examples
 drop_non_plants <- function(df) {
   
-  non_spp = c("2FA", "2FORB", "2FP", "2GA", "2GP", "2LICHN",
-              "2LTR", "2LTRWS",  "2PLANT",  "2W", "NOPLANT", "L", "WL", "2GRAM", "S")
+  non_spp = c("2FA", "2FORB", "2FP", "2GA", "2GP", "2LICHN", "2LTR", "2LTRWS",  "2PLANT",  "2W", "NOPLANT", "L", "WL", "2GRAM", "S")
+  
+  # this is the list from https://github.com/pointblue/RMN.functions/blob/master/R/veg_species.list.R         
+  # c("", "2FA", "2FORB", "2FP", "2GA", "2GP", "2LICHN", "2LTR", "2LTRWS",  "2PLANT",  "2W", "NOPLANT", "L", "WL")
   
   df <- df %>% 
     filter(!USDA.code %in% non_spp)
@@ -63,18 +65,29 @@ drop_non_plants <- function(df) {
 #' may also use list of invasive species only:
 #' Invazivesv1.csv is all plants in CAPlantsv2 with Cal-IPC in the Invasive field
 #' read.csv(here("data/helper_files/Invasivesv1.csv"))
+#' Also includes layers in "data/helper_files/no_ID_USDAcode.csv
 #' 
 #'
 #' @examples long_lpi_assigned <- assign_functional_group_status(long_lpi)
 assign_functional_group_status <- function(df, CAPlants = read.csv(here("data/helper_files/CAPlantsv2.csv"))) {
-  df <- df %>% 
-  left_join(CAPlants %>% dplyr::select('USDA.code' = Symbol, Scientific.Name, Common.Name, Native.Status, Invasive, FunGrp1, FunGrp2, FunGrp, Growth.Habit)) %>% 
+  df_out <- CAPlants %>% 
+    dplyr::select('USDA.code' = Symbol, Scientific.Name, Common.Name, Native.Status, Invasive, FunGrp1, FunGrp2, FunGrp, Growth.Habit) %>% 
+    bind_rows(read.csv(here("data/helper_files/no_ID_USDAcode.csv"))) %>% 
+    right_join(df) %>% 
     mutate(nat.nnat.inv = case_when(grepl("L48 \\(N\\)", Native.Status) ~ "Native",
                                     grepl("L48 \\(I\\)", Native.Status) & !grepl("Cal-IPC", Invasive)~ "Non-native",
                                     grepl("L48 \\(I\\)", Native.Status) & grepl("Cal-IPC", Invasive) ~ "Invasive"),
            FunGrp = case_when(FunGrp == "ShrubsTrees" & grepl("hrub", Growth.Habit) ~ "Shrub",
                               FunGrp == "ShrubsTrees" & !grepl("hrub", Growth.Habit) ~ "Tree",
                               TRUE ~ as.character(FunGrp)))
+  
+  
+#  from https://github.com/pointblue/RMN.functions/blob/master/R/veg_species.list.R        
+#  SppList$Provenance = replace(SppList$Provenance, SppList$Native.Status == "L48 (N)", "Native")
+#  SppList$Provenance = replace(SppList$Provenance, SppList$Native.Status == "L48 (I)", "Non-native")
+  
+  
+  
 }
 
 
